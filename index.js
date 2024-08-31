@@ -1,47 +1,32 @@
 const process = require('node:process')
-const fs = require('node:fs')
-const net = require('node:net')
-const child_process = require('node:child_process')
-const readline = require('node:readline')
-const options = require('./src/options')
 
-const splitCoords = coords => {
-  const split = coords.split(':')
-  const port = split.pop()
-  return {
-    host: split.join(':') || 'localhost',
-    port
+const runAsChild = () => {
+  const setupListener = data => {
+    console.error(`child: data on stdin: ${data.toString('utf8')}`)
+    process.stdout.write(data)
   }
+  process.stdin.on('data', setupListener)
 }
 
-const [localCoords, remoteCoords] = (options.L || options.R).split('|')
-const {host: localHost, port: localPort} = splitCoords(localCoords)
-const {host: remoteHost, port: remotePort} = splitCoords(remoteCoords)
+const runAsParent = async () => {
+  const child_process = require('node:child_process')
 
-const remoteReplString = fs.readFileSync('./src/bootstrap.js', 'utf8')
-const remoteSetup = [
-  ...fs
-    .readFileSync('./src/remoteSetup.js', 'utf8')
-    .split('\n')
-    .filter(line => !!line),
-    '',
-    // The second newline indicates the end of the remote setup script.
-    ''
-  ].join('\n')
+  const [localPort, remotePort] = (process.argv.filter(arg => arg.match(/[0-9]+:[0-9]+/))[0] || '').match(/[^:]+/g)
+  const listenRemotely = process.argv.includes('-R')
+  const commandArgs = process.argv.slice(process.argv.findIndex(arg => arg === '--') + 1)
+  const command = commandArgs.shift()
 
-const pipe = child_process.spawn(options._[0], [...options._.slice(1), `node -e '${remoteReplString}'`], {stdio: 'pipe'})
+  const child = child_process.spawn(command, commandArgs, {
+    stdio: ['pipe', 'pipe', 'inherit']
+  })
 
-const remoteStderr = readline.createInterface({input: pipe.stderr})
-remoteStderr.on('line', line => console.error(`remote stderr: ${line}`))
-remoteStderr.on('close', () => console.error('remote stderr EOF'))
+  process.stdin.on('data', data => {
+    console.log(`parent: data on stdin: ${data.toString('utf8')}`)
+    child.stdin.write(data)
+  })
+  child.stdout.on('data', data => {
+    console.log(`parent: data from child: ${data.toString('utf8')}`)
+  })
+}
 
-pipe.stdin.write(remoteSetup)
-pipe.stdin.write(`${options.L ? 'false': 'true'}\n`)
-pipe.stdin.write(`${remoteHost}\n`)
-pipe.stdin.write(`${remotePort}\n`)
-pipe.stdin.write('\n')
-
-process.stdin.on('data', data => {
-  console.log('writing data to remote stdin')
-  pipe.stdin.write(data)
-})
+;(async () => await (process.argv.length === 2 ? runAsChild() : runAsParent()))()

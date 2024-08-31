@@ -15,8 +15,5 @@
   "bugs": {
     "url": "https://github.com/gabrielschulhof/node-shell-tunnel/issues"
   },
-  "homepage": "https://github.com/gabrielschulhof/node-shell-tunnel#readme",
-  "dependencies": {
-    "yargs": "^17.7.2"
-  }
+  "homepage": "https://github.com/gabrielschulhof/node-shell-tunnel#readme"
 }
