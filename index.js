@@ -25,7 +25,7 @@ const sockId = c => `${process.hrtime.bigint()}${c._handle.fd}${Math.round(Math.
 
 let logger = () => {}
 
-const portForward = async (port, input, output, listen, verbose) => {
+const portForward = (port, input, output, listen, verbose) => {
   if (verbose) {
     logger = console.error
   }
@@ -72,6 +72,7 @@ const portForward = async (port, input, output, listen, verbose) => {
       .createServer(c => {
         const id = sockId(c)
         setupSocket(c, id)
+        // Trigger remote socket creation.
         output.write(`${JSON.stringify({id, length: 0})}\n`)
       })
       .on('error', err => { throw err })
@@ -86,7 +87,6 @@ const portForward = async (port, input, output, listen, verbose) => {
     logger(`input: data: Entering with data of length ${data.length}`)
     buf = Buffer.concat([buf, data])
     logger(`input: data: buf is |${buf.toString('utf8')}|`)
-    logger(`input: data: Buffer has become |${buf.toString('utf8')}|`)
     if (currentId === undefined) {
       const nl = buf.indexOf('\n')
       logger(`input: data: nl: ${nl}`)
@@ -124,7 +124,8 @@ const portForward = async (port, input, output, listen, verbose) => {
         connections[currentId].write(buf)
         buf = Buffer.alloc(0)
       } else {
-        // currentLength is negative.
+        // currentLength is negative. This means we got all the data for the current socket we were expecting, plus the
+        // beginnings of a new message.
         logger(`input: data: count of superfluous bytes: ${-currentLength}`)
         connections[currentId].write(buf.subarray(0, buf.length + currentLength))
         buf = buf.subarray(data.length, -currentLength)
@@ -144,15 +145,14 @@ const runAsChild = async () => {
 }
 
 const runAsParent = async () => {
-  const child_process = require('node:child_process')
+  const { spawn } = require('node:child_process')
 
   const [localPort, remotePort] = (process.argv.filter(arg => arg.match(/[0-9]+:[0-9]+/))[0] || '').match(/[^:]+/g)
   const listenRemotely = process.argv.includes('-R')
   const verbose = process.argv.includes('-d')
   const commandArgs = process.argv.slice(process.argv.findIndex(arg => arg === '--') + 1)
-  logger(`${JSON.stringify({localPort, remotePort, listenRemotely, commandArgs}, null, 2)}`)
   const command = commandArgs.shift()
-  const child = child_process.spawn(command, commandArgs, {
+  const child = spawn(command, commandArgs, {
     stdio: ['pipe', 'pipe', 'pipe']
   })
 
