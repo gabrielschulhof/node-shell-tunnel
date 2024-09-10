@@ -139,12 +139,15 @@ const portForward = (port, input, output, listen, verbose) => {
 }
 
 const runAsChild = async () => {
+  process.title = 'shell_tunnel(child)'
+
   const { port, listen, verbose } = JSON.parse(await line(process.stdin))
   process.stdout.write('OK\n')
   portForward(port, process.stdin, process.stdout, listen, verbose)
 }
 
 const runAsParent = async () => {
+  process.title = 'shell_tunnel(parent)'
   const { spawn } = require('node:child_process')
 
   const [localPort, remotePort] = (process.argv.filter(arg => arg.match(/[0-9]+:[0-9]+/))[0] || '').match(/[^:]+/g)
